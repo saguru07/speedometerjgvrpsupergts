@@ -10,14 +10,18 @@ const CONFIG = {
     brandLogo: 'logo.png',
 
     chimeVolume: 0.35,
-    fuelWarn: 0.2,
-    fuelRepeatMs: 30000,      // ulangi chime bensin (0 = sekali)
+    fuelWarn: 0.2,            // di bawah ini: indikator kuning + chime peringatan
+    fuelRepeatMs: 30000,      // ulangi chime peringatan (0 = sekali)
+    fuelCritical: 0.1,        // di bawah ini: chime berulang cepat
+    fuelCriticalRepeatMs: 2000,
 
     seatbeltSound: 'seatbelt.mp3',
     seatbeltVolume: 0.8,
     seatbeltMinSpeed: 1.5,              // m/s, kira-kira 5 km/h. Di bawah ini dianggap diam
-    seatbeltClickSound: 'seatbelt-click.mp3',
-    seatbeltClickVolume: 0.8
+    seatbeltClickSound: 'seatbelt-click.mp3',     // saat sabuk dipasang
+    seatbeltClickVolume: 0.8,
+    seatbeltUnclickSound: 'seatbelt-unclick.mp3', // saat sabuk dilepas
+    seatbeltUnclickVolume: 0.8
 };
 
 const SPEED_FACTOR = CONFIG.unit === 'KMH' ? 3.6 : 2.236936;
@@ -157,20 +161,23 @@ let seatbeltFallbackTimer = null;
 let seatbeltFileOK = true;
 seatbeltAudio.addEventListener('error', () => { seatbeltFileOK = false; });
 
-// --- Suara "klik" saat sabuk dipasang ---
-const clickAudio = new Audio(CONFIG.seatbeltClickSound);
-clickAudio.volume = CONFIG.seatbeltClickVolume;
-let clickFileOK = true;
-clickAudio.addEventListener('error', () => { clickFileOK = false; });
-
-function playSeatbeltClick() {
-    if (clickFileOK) {
-        clickAudio.currentTime = 0;
-        clickAudio.play().catch(e => console.log('klik seatbelt gagal:', e.name));
-    } else {
-        tone(1800, 0, 0.05); // fallback kalau file klik belum ada
-    }
+// --- Suara sekali putar: klik (dipasang) & unclick (dilepas) ---
+function makeClip(src, volume, fallbackFreq) {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    let ok = true;
+    audio.addEventListener('error', () => { ok = false; });
+    return function play() {
+        if (ok) {
+            audio.currentTime = 0;
+            audio.play().catch(e => console.log(src + ' gagal diputar:', e.name));
+        } else {
+            tone(fallbackFreq, 0, 0.05); // fallback kalau file belum ada
+        }
+    };
 }
+const playSeatbeltClick = makeClip(CONFIG.seatbeltClickSound, CONFIG.seatbeltClickVolume, 1800);
+const playSeatbeltUnclick = makeClip(CONFIG.seatbeltUnclickSound, CONFIG.seatbeltUnclickVolume, 1100);
 
 function startSeatbeltSound() {
     if (seatbeltFileOK) {
@@ -291,22 +298,25 @@ window.setRPM = function (rpm) {
 };
 
 // 3. Bensin (kiri)
-let fuelIsLow = false, fuelTimer = null;
+// Level: 'ok' (aman), 'low' (< fuelWarn), 'critical' (< fuelCritical)
+let fuelLevel = 'ok', fuelTimer = null;
 window.setFuel = function (fuel) {
     const val = Number(fuel || 0);
     const p = Math.max(0, Math.min(1, val > 1 ? val / 100 : val));
     $('fuel-value').textContent = Math.round(p * 100);
     setBar(fuelSegs, p);
-    const low = p < CONFIG.fuelWarn;
-    $('fuel-group').classList.toggle('low', low);
-    if (low !== fuelIsLow) {
-        fuelIsLow = low;
-        clearInterval(fuelTimer); fuelTimer = null;
-        if (low) {
-            playChime('fuel');
-            if (CONFIG.fuelRepeatMs > 0) fuelTimer = setInterval(() => playChime('fuel'), CONFIG.fuelRepeatMs);
-        }
-    }
+    $('fuel-group').classList.toggle('low', p < CONFIG.fuelWarn);
+
+    const level = p < CONFIG.fuelCritical ? 'critical' : p < CONFIG.fuelWarn ? 'low' : 'ok';
+    if (level === fuelLevel) return;
+    fuelLevel = level;
+
+    // Level berubah: hentikan timer lama, mulai yang sesuai level baru
+    clearInterval(fuelTimer); fuelTimer = null;
+    if (level === 'ok') return;
+    playChime('fuel');
+    const every = level === 'critical' ? CONFIG.fuelCriticalRepeatMs : CONFIG.fuelRepeatMs;
+    if (every > 0) fuelTimer = setInterval(() => playChime('fuel'), every);
 };
 
 // 4. Engine health (kanan)
@@ -359,9 +369,11 @@ window.setSeatbelts = function (state) {
     const buckled = isTrue(state);
     $('seatbelts').className = buckled ? 'icon active' : 'icon warn';
     if (buckled === seatbeltBuckled) return;
-    const wasUnbuckled = seatbeltBuckled === false;
+    const prev = seatbeltBuckled;
     seatbeltBuckled = buckled;
-    if (buckled && wasUnbuckled) playSeatbeltClick(); // klik hanya saat benar-benar baru dipasang
+    // Suara hanya saat benar-benar berubah, bukan pada pembacaan status pertama
+    if (buckled && prev === false) playSeatbeltClick();
+    else if (!buckled && prev === true) playSeatbeltUnclick();
     updateSeatbeltSound();
 };
 
