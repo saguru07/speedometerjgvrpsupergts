@@ -19,9 +19,9 @@ const CONFIG = {
     seatbeltVolume: 0.8,
     seatbeltMinSpeed: 1.5,              // m/s, kira-kira 5 km/h. Di bawah ini dianggap diam
     seatbeltClickSound: 'seatbelt-click.mp3',     // saat sabuk dipasang
-    seatbeltClickVolume: 0.8,
+    seatbeltClickVolume: 0.6,
     seatbeltUnclickSound: 'seatbelt-unclick.mp3', // saat sabuk dilepas
-    seatbeltUnclickVolume: 0.8
+    seatbeltUnclickVolume: 0.6
 };
 
 const SPEED_FACTOR = CONFIG.unit === 'KMH' ? 3.6 : 2.236936;
