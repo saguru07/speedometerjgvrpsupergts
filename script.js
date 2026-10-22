@@ -14,7 +14,10 @@ const CONFIG = {
     fuelRepeatMs: 30000,      // ulangi chime bensin (0 = sekali)
 
     seatbeltSound: 'seatbelt.mp3',
-    seatbeltVolume: 0.8
+    seatbeltVolume: 0.8,
+    seatbeltMinSpeed: 1.5,              // m/s, kira-kira 5 km/h. Di bawah ini dianggap diam
+    seatbeltClickSound: 'seatbelt-click.mp3',
+    seatbeltClickVolume: 0.8
 };
 
 const SPEED_FACTOR = CONFIG.unit === 'KMH' ? 3.6 : 2.236936;
@@ -122,7 +125,7 @@ function getAudio() {
 }
 
 ['click', 'keydown', 'touchstart', 'mousedown'].forEach(evt =>
-    window.addEventListener(evt, () => { getAudio(); if (seatbeltBuckled === false) startSeatbeltSound(); }, { once: true })
+    window.addEventListener(evt, () => { getAudio(); if (seatbeltSounding) startSeatbeltSound(); }, { once: true })
 );
 
 function tone(freq, offset, duration) {
@@ -146,6 +149,7 @@ const CHIMES = {
 function playChime(type) { (CHIMES[type] || []).forEach(n => tone(n[0], n[1], n[2])); }
 window.playChime = playChime;
 
+// --- Suara alarm seatbelt (loop) ---
 const seatbeltAudio = new Audio(CONFIG.seatbeltSound);
 seatbeltAudio.loop = true;
 seatbeltAudio.volume = CONFIG.seatbeltVolume;
@@ -153,9 +157,24 @@ let seatbeltFallbackTimer = null;
 let seatbeltFileOK = true;
 seatbeltAudio.addEventListener('error', () => { seatbeltFileOK = false; });
 
+// --- Suara "klik" saat sabuk dipasang ---
+const clickAudio = new Audio(CONFIG.seatbeltClickSound);
+clickAudio.volume = CONFIG.seatbeltClickVolume;
+let clickFileOK = true;
+clickAudio.addEventListener('error', () => { clickFileOK = false; });
+
+function playSeatbeltClick() {
+    if (clickFileOK) {
+        clickAudio.currentTime = 0;
+        clickAudio.play().catch(e => console.log('klik seatbelt gagal:', e.name));
+    } else {
+        tone(1800, 0, 0.05); // fallback kalau file klik belum ada
+    }
+}
+
 function startSeatbeltSound() {
     if (seatbeltFileOK) {
-        seatbeltAudio.play().catch(() => {});
+        seatbeltAudio.play().catch(e => console.log('seatbelt play gagal:', e.name));
     } else if (!seatbeltFallbackTimer) {
         playChime('seatbelt');
         seatbeltFallbackTimer = setInterval(() => playChime('seatbelt'), 5000);
@@ -166,6 +185,18 @@ function stopSeatbeltSound() {
     seatbeltAudio.currentTime = 0;
     clearInterval(seatbeltFallbackTimer);
     seatbeltFallbackTimer = null;
+}
+
+// Alarm hanya aktif kalau sabuk belum dipasang DAN mobil bergerak
+let lastSpeedMps = 0, seatbeltSounding = false;
+function updateSeatbeltSound() {
+    const min = CONFIG.seatbeltMinSpeed;
+    // hysteresis: berhenti hanya kalau kecepatan turun jauh di bawah batas, biar tidak putus-nyambung
+    const moving = lastSpeedMps > (seatbeltSounding ? min * 0.5 : min);
+    const should = seatbeltBuckled === false && moving;
+    if (should === seatbeltSounding) return;
+    seatbeltSounding = should;
+    should ? startSeatbeltSound() : stopSeatbeltSound();
 }
 
 // ===================== HELPER =====================
@@ -246,7 +277,10 @@ window.playIntro = playIntro;
 
 // 1. Kecepatan (m/s)
 window.setSpeed = function (speed) {
-    $('speed').textContent = Math.min(999, Math.round(Number(speed || 0) * SPEED_FACTOR));
+    const mps = Number(speed || 0);
+    lastSpeedMps = mps;
+    $('speed').textContent = Math.min(999, Math.round(mps * SPEED_FACTOR));
+    updateSeatbeltSound();
 };
 
 // 2. RPM (0.0 - 1.0) -> jarum + sapuan
@@ -325,8 +359,10 @@ window.setSeatbelts = function (state) {
     const buckled = isTrue(state);
     $('seatbelts').className = buckled ? 'icon active' : 'icon warn';
     if (buckled === seatbeltBuckled) return;
+    const wasUnbuckled = seatbeltBuckled === false;
     seatbeltBuckled = buckled;
-    buckled ? stopSeatbeltSound() : startSeatbeltSound();
+    if (buckled && wasUnbuckled) playSeatbeltClick(); // klik hanya saat benar-benar baru dipasang
+    updateSeatbeltSound();
 };
 
 // 8. Odometer
