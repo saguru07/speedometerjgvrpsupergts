@@ -3,7 +3,7 @@
 :root {
     --hud-scale: 0.7;               /* ubah untuk memperbesar / memperkecil HUD */
     --hud-bottom: 5px;             /* jarak dari tepi bawah layar */
-        --white: #f4f6f8;
+    --white: #f4f6f8;
     --off: rgba(255, 255, 255, 0.22);
     --green: #20e070;
     --blue: #2f6bff;
@@ -66,11 +66,14 @@ html.preview .hud { transform-origin: center; }
 .side-val { fill: rgba(255, 255, 255, 0.8); font-size: 15px; font-weight: 700; text-anchor: middle; font-family: var(--font); }
 .side-val .pct { font-size: 10px; opacity: .7; }
 
-.side.low { animation: pulse 1.2s ease-in-out infinite; }
 .side.low .seg.on, .side.warn .seg.on { stroke: var(--amber); }
 .side.low .side-icon, .side.warn .side-icon { color: var(--amber); }
 .side.danger .seg.on { stroke: var(--red); }
 .side.danger .side-icon { color: var(--red); }
+
+/* Bensin kritis (< 10%): hanya bar + ikon yang berkedip */
+.side.critical .seg.on,
+.side.critical .side-icon { animation: pulse 1s ease-in-out infinite; }
 
 /* ===== Indikator bawah ===== */
 .icons {
