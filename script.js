@@ -12,7 +12,7 @@ const CONFIG = {
     chimeVolume: 0.35,
     fuelWarn: 0.2,            // di bawah ini: indikator kuning + chime peringatan
     fuelRepeatMs: 30000,      // ulangi chime peringatan (0 = sekali)
-    fuelCritical: 0.1,        // di bawah ini: chime berulang cepat
+    fuelCritical: 0.1,        // di bawah ini: chime berulang cepat + bar & ikon berkedip
     fuelCriticalRepeatMs: 2000,
 
     seatbeltSound: 'seatbelt.mp3',
@@ -306,6 +306,7 @@ window.setFuel = function (fuel) {
     $('fuel-value').textContent = Math.round(p * 100);
     setBar(fuelSegs, p);
     $('fuel-group').classList.toggle('low', p < CONFIG.fuelWarn);
+    $('fuel-group').classList.toggle('critical', p < CONFIG.fuelCritical);
 
     const level = p < CONFIG.fuelCritical ? 'critical' : p < CONFIG.fuelWarn ? 'low' : 'ok';
     if (level === fuelLevel) return;
